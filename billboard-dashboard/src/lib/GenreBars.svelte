@@ -1,6 +1,6 @@
 <script>
 	import * as d3 from 'd3';
-	import { countByGenre, plural } from './data.js';
+	import { countByGenre, plural, genreColor } from './data.js';
 
 	// hoveredGenre is owned by the page; this view reports hovers through onHoverGenre.
 	let { data, hoveredGenre = null, onHoverGenre = () => {} } = $props();
@@ -47,7 +47,8 @@
 	<h2>#1 songs by primary genre</h2>
 	<p class="subtitle">
 		Counts songs, not weeks at #1. Primary genre is the first genre listed; songs with no genre are
-		shown as "Unlabeled". Hover or focus a genre to highlight its songs in the scatterplot.
+		shown as "Unlabeled" (outlined). The four largest genres have their own color; the rest share gray.
+		Hover or focus a genre to highlight its songs in the scatterplot.
 	</p>
 	<div class="chart" bind:clientWidth={width}>
 		<svg {width} {height} role="group" aria-label="Horizontal bar chart of the number of #1 songs in each primary genre">
@@ -81,7 +82,9 @@
 							y={y(d.genre)}
 							width={x(d.count)}
 							height={y.bandwidth()}
-							fill={d.genre === 'Unlabeled' ? '#a3a9b0' : '#2f6fb0'}
+							fill={d.genre === 'Unlabeled' ? '#fff' : genreColor(d.genre)}
+							stroke={d.genre === 'Unlabeled' ? genreColor(d.genre) : 'none'}
+							stroke-width="1.5"
 						/>
 						<text class="value" x={x(d.count) + 4} y={y(d.genre) + y.bandwidth() / 2} dy="0.35em">{d.count}</text>
 					</g>

@@ -1,5 +1,6 @@
 <script>
 	import * as d3 from 'd3';
+	import { untrack } from 'svelte';
 	import { FIRST_YEAR, LAST_YEAR, plural } from './data.js';
 
 	// Context view: always receives the full dataset. The brushed [startYear, endYear] (or null when
@@ -51,7 +52,11 @@
 	let brushG = $state();
 	// The range last sent through onbrush. Brush memory only (the page owns yearRange): used to redraw the
 	// brush after a resize and to hit-test hovers and clicks.
-	let selectedYears = null;
+	// Reactive so the timeline can grey out unselected years and label the selection.
+	let selectedYears = $state.raw(null);
+	let selectionPx = $derived(selectedYears ? toPixels(selectedYears) : null);
+	const uid = $props.id();
+	const clipId = `${uid}-selection`;
 	// Gesture in progress: which brush element it started on and where (set on 'start', cleared on 'end').
 	let gesture = null;
 
@@ -124,9 +129,11 @@
 				// Snap the brush to the selected years (or hide it when cleared).
 				d3.select(brushG).call(b.move, selectedYears ? toPixels(selectedYears) : null);
 			});
+		// untrack: the brush is rebuilt only on resize, never while selectedYears changes mid-drag.
+		const current = untrack(() => selectedYears);
 		d3.select(brushG)
 			.call(b)
-			.call(b.move, selectedYears ? toPixels(selectedYears) : null)
+			.call(b.move, current ? toPixels(current) : null)
 			// Hover tracking for the readout and the clear cursor; off while a button is pressed.
 			.on('pointermove.hover', (event) => {
 				if (event.buttons) return clearHover();
@@ -150,12 +157,40 @@
 				<g class="axis" bind:this={xAxisG} transform="translate(0,{innerHeight})"></g>
 				<g class="axis" bind:this={yAxisG}></g>
 
-				<path d={linePath} fill="none" stroke="#2f6fb0" stroke-width="1.75" />
-				{#each counts as d (d.year)}
-					<circle cx={x(d.year)} cy={y(d.count)} r="3" fill="#2f6fb0" />
-				{/each}
+				<!-- Full data always drawn. With a selection, years outside it turn gray and the selected
+				     years stay blue (the blue layer is clipped to the selection). -->
+				{#if selectionPx}
+					<clipPath id={clipId}>
+						<rect x={selectionPx[0]} y={-margin.top} width={selectionPx[1] - selectionPx[0]} height={innerHeight + margin.top} />
+					</clipPath>
+					<g class="unselected">
+						<path d={linePath} />
+						{#each counts as d (d.year)}
+							<circle cx={x(d.year)} cy={y(d.count)} r="3" />
+						{/each}
+					</g>
+				{/if}
+				<g clip-path={selectionPx ? `url(#${clipId})` : null}>
+					<path d={linePath} fill="none" stroke="#2f6fb0" stroke-width="1.75" />
+					{#each counts as d (d.year)}
+						<circle cx={x(d.year)} cy={y(d.count)} r="3" fill="#2f6fb0" />
+					{/each}
+				</g>
 
 				<g class="brush" class:over-selection={overSelection} bind:this={brushG}></g>
+
+				<!-- Selected years, labeled above the brush (in the top margin). -->
+				{#if selectionPx}
+					{@const mid = (selectionPx[0] + selectionPx[1]) / 2}
+					<text
+						class="selection-label"
+						class:clearing={overSelection}
+						x={Math.min(Math.max(mid, 40), innerWidth - 40)}
+						y="-8"
+						text-anchor="middle"
+						>{selectedYears[0] === selectedYears[1] ? selectedYears[0] : `${selectedYears[0]}–${selectedYears[1]}`}</text
+					>
+				{/if}
 
 				<!-- Readout for the hovered year; ignores the pointer so the brush still gets every event. -->
 				{#if hoverYear}
@@ -223,6 +258,24 @@
 		fill: #2f6fb0;
 		fill-opacity: 0.12;
 		stroke: #2f6fb0;
+		stroke-width: 1.5;
+	}
+	.unselected path {
+		fill: none;
+		stroke: #c4c9cf;
+		stroke-width: 1.75;
+	}
+	.unselected circle {
+		fill: #c4c9cf;
+	}
+	.selection-label {
+		font-size: 12px;
+		font-weight: 700;
+		fill: #2f6fb0;
+		pointer-events: none;
+	}
+	.selection-label.clearing {
+		fill: #d1242f;
 	}
 	/* Clear cue while hovering the selection: it turns red and the cursor becomes a white × on red.
 	   CSS overrides d3's cursor attributes; edge handles keep ew-resize. */

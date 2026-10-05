@@ -43,6 +43,30 @@ export function plural(n, word) {
 	return `${d3.format(',')(n)} ${n === 1 ? word : word + 's'}`;
 }
 
+// Genre colors, shared by GenreBars, Scatter, and KpiRow. Keyed by genre name (never by rank), so
+// filtering never repaints a genre. Only the four largest genres get hues: past four, categorical
+// colors can't be told apart in a dense scatterplot (validated colorblind-safe, all pairs).
+// The other eight genres share one gray; Unlabeled is drawn as an outline (hollow) in a darker gray.
+export const GENRE_COLORS = {
+	Pop: '#2a78d6',
+	Rock: '#eb6834',
+	'Funk/Soul': '#1baf7a',
+	'Electronic/Dance': '#4a3aa7'
+};
+export const OTHER_COLOR = '#a8aeb5';
+export const UNLABELED_COLOR = '#6e7781';
+
+export function genreColor(genre) {
+	return GENRE_COLORS[genre] ?? (genre === 'Unlabeled' ? UNLABELED_COLOR : OTHER_COLOR);
+}
+
+// Legend entries, in the same order everywhere.
+export const GENRE_LEGEND = [
+	...Object.entries(GENRE_COLORS).map(([label, color]) => ({ label, color, hollow: false })),
+	{ label: 'Other genres', color: OTHER_COLOR, hollow: false },
+	{ label: 'Unlabeled', color: UNLABELED_COLOR, hollow: true }
+];
+
 // Song counts per primary genre, highest first (ties broken alphabetically).
 export function countByGenre(songs) {
 	return d3

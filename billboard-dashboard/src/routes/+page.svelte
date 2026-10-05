@@ -7,22 +7,28 @@
 	import GenreBars from '#lib/GenreBars.svelte';
 	import Scatter from '#lib/Scatter.svelte';
 
+	// main dataset and loading error state
 	let songs = $state([]);
 	let error = $state(null);
+
 	// Linking state: the primary genre under the pointer in GenreBars, or null. Owned here.
 	let hoveredGenre = $state(null);
+
 	// Filtering state: the brushed [startYear, endYear] from Timeline, or null for all years. Owned here.
 	let yearRange = $state(null);
+
 	// The one filtered subset every result view reads. Timeline keeps the full songs array.
 	let filtered = $derived(
 		yearRange
 			? songs.filter((d) => d.year >= yearRange[0] && d.year <= yearRange[1])
 			: songs
 	);
+	// display label for selected year range
 	let rangeLabel = $derived(
 		!yearRange ? '' : yearRange[0] === yearRange[1] ? `${yearRange[0]}` : `${yearRange[0]}–${yearRange[1]}`
 	);
 
+	// load and parse CSV file
 	onMount(async () => {
 		try {
 			songs = await d3.csv('/billboard_hot_100_no1.csv', parseRow);
@@ -35,6 +41,19 @@
 <svelte:head>
 	<title>Billboard #1 Songs, {FIRST_YEAR}–{LAST_YEAR}</title>
 </svelte:head>
+
+<!-- Label above the filtered views (KPIs, genre bars, scatterplot): says which years they show. -->
+{#snippet showing()}
+	<p class="showing" class:active={yearRange} aria-live="polite">
+		{#if yearRange}
+			<strong>Showing songs from {rangeLabel}</strong>
+			<span class="count">{d3.format(',')(filtered.length)} of {d3.format(',')(songs.length)} songs · click the timeline to clear</span>
+		{:else}
+			<strong>Showing all years</strong>
+			<span class="count">{FIRST_YEAR}–{LAST_YEAR} · {d3.format(',')(songs.length)} songs</span>
+		{/if}
+	</p>
+{/snippet}
 
 <main>
 	<header>
@@ -52,23 +71,10 @@
 	{:else if songs.length === 0}
 		<p class="status">Loading songs…</p>
 	{:else}
-		<p class="scope">
-			{#if yearRange}
-				Summary for <strong>{rangeLabel}</strong>, the years selected on the timeline
-			{:else}
-				Summary for all years, {FIRST_YEAR}–{LAST_YEAR}
-			{/if}
-		</p>
+		{@render showing()}
 		<KpiRow data={filtered} />
 		<Timeline data={songs} onbrush={(range) => (yearRange = range)} />
-		<p class="filter-status" aria-live="polite">
-			{#if yearRange}
-				Filtered to <strong>{rangeLabel}</strong>: {d3.format(',')(filtered.length)} of
-				{d3.format(',')(songs.length)} songs. The summary, genre bars, and scatterplot show only these songs.
-			{:else}
-				Showing all {d3.format(',')(songs.length)} songs, {FIRST_YEAR}–{LAST_YEAR}.
-			{/if}
-		</p>
+		{@render showing()}
 		<div class="pair">
 			<GenreBars data={filtered} {hoveredGenre} onHoverGenre={(genre) => (hoveredGenre = genre)} />
 			<Scatter data={filtered} {hoveredGenre} />
@@ -111,20 +117,32 @@
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
 		gap: 20px;
 	}
-	.scope {
-		margin: 0 0 -10px;
-		font-size: 0.875rem;
-		color: #4b5159;
+	.showing {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 2px 10px;
+		margin: -6px 0;
+		padding: 8px 12px;
+		border: 1px solid #e3e3df;
+		border-radius: 8px;
+		background: #fff;
+		font-size: 0.9375rem;
+	}
+	.showing.active {
+		border-color: #2f6fb0;
+		background: #eaf1f8;
+		color: #174a7c;
+	}
+	.showing .count {
+		font-size: 0.8125rem;
+		color: #5d636b;
 	}
 	/* Tighter cards on phones so the charts get more width. */
 	@media (max-width: 480px) {
 		main :global(.card) {
 			padding: 12px 12px 6px;
 		}
-	}
-	.filter-status {
-		margin: -8px 0 0;
-		font-size: 0.875rem;
 	}
 	.status,
 	footer {

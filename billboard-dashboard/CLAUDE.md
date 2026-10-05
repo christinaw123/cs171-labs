@@ -33,6 +33,9 @@ No test, lint, or format tooling is configured. `.npmrc` sets `engine-strict=tru
 - The brush overlay covers the timeline points, so hovering shows a readout (guide line + "1975: 35 #1 songs") instead of `<title>` tooltips.
 - GenreBars: each genre's whole row (label, bar, count) is the hover/focus target, so 1-song bars (~1px wide) can be hovered. Rows are keyboard-focusable; focus acts like hover.
 - Use `plural()` from `data.js` for counts in text ("1 song", "2 songs").
+- Genre colors: use `genreColor()` from `data.js` everywhere (GenreBars, Scatter, KpiRow). Keyed by genre name, never by rank, so filtering never repaints a genre. Only the four largest genres get hues (Pop, Rock, Funk/Soul, Electronic/Dance); more than four categorical hues fail colorblind checks in the dense scatterplot. All other genres share gray `#a8aeb5`; Unlabeled is drawn as an outline in `#6e7781`. Scatter has a legend; hovered songs get a dark ring so gray genres still stand out.
+- Scatter size: radius = `d3.scaleSqrt().domain([0, max weeksAtNumberOne of the current data]).range([0, 10])`, so circle area is proportional to weeks at #1. Domain and range must start at 0. The size legend (1, 5, 10 weeks + the current max) uses the same `radius` scale. Circles are drawn largest-first so small ones stay visible (reordered, never filtered).
+- Above the KPIs and above the genre/scatter pair, a label says "Showing songs from 1990–1999" (or "Showing all years") and is highlighted while a range is active. While a range is selected, the Timeline grays out unselected years (full data still drawn) and labels the selection above the brush.
 - **Linking = highlight:** dim non-matches, remove nothing. **Filtering = remove** non-matches and recompute aggregates. When describing or building a feature, say which one it is.
 
 ## Git workflow

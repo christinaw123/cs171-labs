@@ -1,6 +1,6 @@
 <script>
 	import * as d3 from 'd3';
-	import { countByGenre, plural } from './data.js';
+	import { countByGenre, plural, genreColor } from './data.js';
 
 	let { data } = $props();
 
@@ -18,7 +18,17 @@
 	</div>
 	<div class="kpi">
 		<div class="label">Most common primary genre</div>
-		<div class="value">{topGenre?.genre ?? '—'}</div>
+		<div class="value">
+			{#if topGenre}
+				<span
+					class="swatch"
+					class:hollow={topGenre.genre === 'Unlabeled'}
+					style="--swatch: {genreColor(topGenre.genre)}"
+					aria-hidden="true"
+				></span>
+			{/if}
+			{topGenre?.genre ?? '—'}
+		</div>
 		<div class="note">{topGenre ? plural(topGenre.count, 'song') : ''}</div>
 	</div>
 	<div class="kpi">
@@ -50,6 +60,19 @@
 		font-weight: 700;
 		margin: 4px 0 2px;
 		font-variant-numeric: tabular-nums;
+	}
+	.swatch {
+		display: inline-block;
+		width: 0.55em;
+		height: 0.55em;
+		margin-right: 0.15em;
+		border-radius: 50%;
+		background: var(--swatch);
+		vertical-align: 0.12em;
+	}
+	.swatch.hollow {
+		background: none;
+		box-shadow: inset 0 0 0 2px var(--swatch);
 	}
 	.note {
 		font-size: 0.8125rem;
