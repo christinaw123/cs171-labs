@@ -1,7 +1,8 @@
 <script>
 	import * as d3 from 'd3';
 
-	let { data } = $props();
+	// hoveredGenre links this view to GenreBars: it only changes opacity and never removes songs.
+	let { data, hoveredGenre = null } = $props();
 
 	// Songs with a blank Danceability or Energy cannot be placed, so they are left out (and counted below).
 	let plotted = $derived(data.filter((d) => d.danceability != null && d.energy != null));
@@ -35,6 +36,13 @@
 		{#if missing > 0}{d3.format(',')(plotted.length)} of {d3.format(',')(data.length)} songs shown; {missing}
 			have no audio data.{/if}
 	</p>
+	<p class="link-status">
+		{#if hoveredGenre === null}
+			Hover a genre bar to highlight its songs.
+		{:else}
+			Highlighting <strong>{hoveredGenre}</strong> songs; other songs are dimmed, not removed.
+		{/if}
+	</p>
 	<div class="chart" bind:clientWidth={width}>
 		<svg {width} {height} role="img" aria-label="Scatterplot of Danceability against Energy, one circle per #1 song">
 			<g transform="translate({margin.left},{margin.top})">
@@ -42,7 +50,14 @@
 				<g class="axis" bind:this={yAxisG}></g>
 
 				{#each plotted as d, i (i)}
-					<circle cx={x(d.danceability)} cy={y(d.energy)} r="3" fill="#2f6fb0" fill-opacity="0.45">
+					<circle
+						cx={x(d.danceability)}
+						cy={y(d.energy)}
+						r="3"
+						fill="#2f6fb0"
+						fill-opacity="0.45"
+						opacity={hoveredGenre === null || d.genre === hoveredGenre ? 1 : 0.15}
+					>
 						<title>{d.song} — {d.artist}
 Genre: {d.genre}
 Danceability: {d.danceability}, Energy: {d.energy}</title>
@@ -77,6 +92,12 @@ Danceability: {d.danceability}, Energy: {d.energy}</title>
 	.subtitle {
 		margin: 0 0 8px;
 		font-size: 0.875rem;
+		color: #5d636b;
+	}
+	.link-status {
+		margin: 0 0 8px;
+		min-height: 1.4em;
+		font-size: 0.8125rem;
 		color: #5d636b;
 	}
 	.chart {

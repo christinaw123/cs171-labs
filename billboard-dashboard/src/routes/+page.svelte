@@ -9,6 +9,8 @@
 
 	let songs = $state([]);
 	let error = $state(null);
+	// Linking state: the primary genre under the pointer in GenreBars, or null. Owned here.
+	let hoveredGenre = $state(null);
 
 	onMount(async () => {
 		try {
@@ -42,8 +44,8 @@
 		<KpiRow data={songs} />
 		<Timeline data={songs} />
 		<div class="pair">
-			<GenreBars data={songs} />
-			<Scatter data={songs} />
+			<GenreBars data={songs} {hoveredGenre} onHoverGenre={(genre) => (hoveredGenre = genre)} />
+			<Scatter data={songs} {hoveredGenre} />
 		</div>
 	{/if}
 

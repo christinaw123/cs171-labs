@@ -2,7 +2,8 @@
 	import * as d3 from 'd3';
 	import { countByGenre } from './data.js';
 
-	let { data } = $props();
+	// hoveredGenre is owned by the page; this view reports hovers through onHoverGenre.
+	let { data, hoveredGenre = null, onHoverGenre = () => {} } = $props();
 
 	// Song (row) counts per primary genre, sorted highest to lowest.
 	let genres = $derived(countByGenre(data));
@@ -44,18 +45,23 @@
 	<h2>#1 songs by primary genre</h2>
 	<p class="subtitle">
 		Counts songs, not weeks at #1. Primary genre is the first genre listed; songs with no genre are
-		shown as "Unlabeled".
+		shown as "Unlabeled". Hover a bar to highlight its songs in the scatterplot.
 	</p>
 	<div class="chart" bind:clientWidth={width}>
 		<svg {width} {height} role="img" aria-label="Horizontal bar chart of the number of #1 songs in each primary genre">
 			<g transform="translate({margin.left},{margin.top})">
 				{#each genres as d (d.genre)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<rect
+						class="bar"
+						class:hovered={d.genre === hoveredGenre}
 						x="0"
 						y={y(d.genre)}
 						width={x(d.count)}
 						height={y.bandwidth()}
 						fill={d.genre === 'Unlabeled' ? '#a3a9b0' : '#2f6fb0'}
+						onmouseenter={() => onHoverGenre(d.genre)}
+						onmouseleave={() => onHoverGenre(null)}
 					>
 						<title>{d.genre}: {d.count} songs</title>
 					</rect>
@@ -105,6 +111,13 @@
 	.axis :global(text) {
 		font-size: 12px;
 		fill: #4b5159;
+	}
+	.bar {
+		cursor: pointer;
+	}
+	/* Hover cue: darken the bar without changing its size. */
+	.bar.hovered {
+		filter: brightness(0.75);
 	}
 	.value {
 		font-size: 11px;
