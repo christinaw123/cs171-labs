@@ -11,6 +11,21 @@
 	let error = $state(null);
 	// Linking state: the primary genre under the pointer in GenreBars, or null. Owned here.
 	let hoveredGenre = $state(null);
+	// Filtering state: the brushed year ranges from Timeline, as a list of [startYear, endYear]
+	// (Shift+drag adds ranges), or null for all years. Owned here.
+	let yearRange = $state(null);
+	// The one filtered subset every result view reads: songs in any selected range. Timeline keeps the full songs array.
+	let filtered = $derived(
+		yearRange
+			? songs.filter((d) => yearRange.some(([start, end]) => d.year >= start && d.year <= end))
+			: songs
+	);
+	let rangeLabel = $derived(
+		yearRange
+			?.toSorted((a, b) => a[0] - b[0])
+			.map(([start, end]) => (start === end ? `${start}` : `${start}–${end}`))
+			.join(', ')
+	);
 
 	onMount(async () => {
 		try {
@@ -41,11 +56,19 @@
 	{:else if songs.length === 0}
 		<p class="status">Loading songs…</p>
 	{:else}
-		<KpiRow data={songs} />
-		<Timeline data={songs} />
+		<KpiRow data={filtered} />
+		<Timeline data={songs} {yearRange} onbrush={(range) => (yearRange = range)} />
+		<p class="filter-status" aria-live="polite">
+			{#if yearRange}
+				Filtered to <strong>{rangeLabel}</strong>: {d3.format(',')(filtered.length)} of
+				{d3.format(',')(songs.length)} songs. The summary, genre bars, and scatterplot show only these songs.
+			{:else}
+				Showing all {d3.format(',')(songs.length)} songs, {FIRST_YEAR}–{LAST_YEAR}.
+			{/if}
+		</p>
 		<div class="pair">
-			<GenreBars data={songs} {hoveredGenre} onHoverGenre={(genre) => (hoveredGenre = genre)} />
-			<Scatter data={songs} {hoveredGenre} />
+			<GenreBars data={filtered} {hoveredGenre} onHoverGenre={(genre) => (hoveredGenre = genre)} />
+			<Scatter data={filtered} {hoveredGenre} />
 		</div>
 	{/if}
 
@@ -84,6 +107,10 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
 		gap: 20px;
+	}
+	.filter-status {
+		margin: -8px 0 0;
+		font-size: 0.875rem;
 	}
 	.status,
 	footer {

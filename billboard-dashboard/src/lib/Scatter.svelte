@@ -4,9 +4,10 @@
 	// hoveredGenre links this view to GenreBars: it only changes opacity and never removes songs.
 	let { data, hoveredGenre = null } = $props();
 
-	// Songs with a blank Danceability or Energy cannot be placed, so they are left out (and counted below).
-	let plotted = $derived(data.filter((d) => d.danceability != null && d.energy != null));
-	let missing = $derived(data.length - plotted.length);
+	// Songs with a blank Danceability or Energy cannot be placed, so they are skipped (and counted below).
+	const hasAudio = (d) => d.danceability != null && d.energy != null;
+	let plottedCount = $derived(d3.sum(data, (d) => (hasAudio(d) ? 1 : 0)));
+	let missing = $derived(data.length - plottedCount);
 
 	let width = $state(500);
 	const height = 380;
@@ -33,8 +34,8 @@
 	<h2>Danceability vs. Energy</h2>
 	<p class="subtitle">
 		One circle per song. Both are audio features scored 0–100.
-		{#if missing > 0}{d3.format(',')(plotted.length)} of {d3.format(',')(data.length)} songs shown; {missing}
-			have no audio data.{/if}
+		{#if missing > 0}{d3.format(',')(plottedCount)} of {d3.format(',')(data.length)} songs shown; {missing}
+			{missing === 1 ? 'has' : 'have'} no audio data.{/if}
 	</p>
 	<p class="link-status">
 		{#if hoveredGenre === null}
@@ -49,19 +50,21 @@
 				<g class="axis" bind:this={xAxisG} transform="translate(0,{innerHeight})"></g>
 				<g class="axis" bind:this={yAxisG}></g>
 
-				{#each plotted as d, i (i)}
-					<circle
-						cx={x(d.danceability)}
-						cy={y(d.energy)}
-						r="3"
-						fill="#2f6fb0"
-						fill-opacity="0.45"
-						opacity={hoveredGenre === null || d.genre === hoveredGenre ? 1 : 0.15}
-					>
-						<title>{d.song} — {d.artist}
+				{#each data as d (d)}
+					{#if hasAudio(d)}
+						<circle
+							cx={x(d.danceability)}
+							cy={y(d.energy)}
+							r="3"
+							fill="#2f6fb0"
+							fill-opacity="0.45"
+							opacity={hoveredGenre === null || d.genre === hoveredGenre ? 1 : 0.15}
+						>
+							<title>{d.song} — {d.artist}
 Genre: {d.genre}
 Danceability: {d.danceability}, Energy: {d.energy}</title>
-					</circle>
+						</circle>
+					{/if}
 				{/each}
 
 				<text class="axis-label" x={innerWidth / 2} y={innerHeight + 40} text-anchor="middle">Danceability (0–100)</text>
