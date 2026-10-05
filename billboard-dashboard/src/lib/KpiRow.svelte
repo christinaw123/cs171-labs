@@ -1,6 +1,6 @@
 <script>
 	import * as d3 from 'd3';
-	import { countByGenre } from './data.js';
+	import { countByGenre, plural } from './data.js';
 
 	let { data } = $props();
 
@@ -19,7 +19,7 @@
 	<div class="kpi">
 		<div class="label">Most common primary genre</div>
 		<div class="value">{topGenre?.genre ?? '—'}</div>
-		<div class="note">{topGenre ? `${d3.format(',')(topGenre.count)} songs` : ''}</div>
+		<div class="note">{topGenre ? plural(topGenre.count, 'song') : ''}</div>
 	</div>
 	<div class="kpi">
 		<div class="label">Average weeks at #1</div>

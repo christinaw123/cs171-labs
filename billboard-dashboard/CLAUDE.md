@@ -25,12 +25,14 @@ No test, lint, or format tooling is configured. `.npmrc` sets `engine-strict=tru
 ## Coordination rules
 
 - `yearRange` and `hoveredGenre` live as shared state in the page (`+page.svelte`). Each has exactly one owner.
-- Filtering: `let yearRange = $state(null)`; `let filtered = $derived(...)`. `yearRange` is `null` (all years) or a list of inclusive `[startYear, endYear]` ranges; `filtered` keeps songs in any range. KpiRow, GenreBars, and Scatter receive `filtered` through `data` props. All filtered views must read this same derived subset.
-- Timeline receives the full dataset and keeps its full year domain so the brush always spans 1958–2025. It also receives `yearRange` and draws its brush from it. The last range is the active d3 brush (movable/resizable); earlier ranges are static Svelte `<rect>`s.
-- Brush gestures: drag replaces the selection; Shift+drag adds a range (merged with any range it overlaps or touches); click anywhere without dragging clears all; Shift+click a range removes just that one. No clear button.
-- Clear cue: while hovering a selected range (a click there clears), the cursor becomes a white × on a red circle and every selected range turns red (`#d1242f`). No extra badges or text. Edge handles keep d3's `ew-resize` cursor.
-- Clearing must not depend on clicking outside the brush: a full 1958–2025 selection leaves no outside area, so a click *inside* a selection must also clear.
+- Filtering: `let yearRange = $state(null)` holds one inclusive `[startYear, endYear]` (single range only; no multi-range). `let filtered = $derived(yearRange ? songs.filter((d) => d.year >= yearRange[0] && d.year <= yearRange[1]) : songs)`. KpiRow, GenreBars, and Scatter receive `filtered` through `data` props. All filtered views must read this same derived subset.
+- Timeline receives exactly `data={songs}` and `onbrush={(range) => (yearRange = range)}`, keeps its full year domain, and remembers its own brush position locally (for resizes). It sends `null` when cleared.
+- Brush gestures: drag selects; drag the selection to move it, or its edges to resize; click anywhere without dragging clears, including inside the selection (a full 1958–2025 selection has no outside area). No clear button.
+- Clear cue: while hovering the selection, it turns red (`#d1242f`) and the cursor becomes a white × on a red circle. No extra badges or text. Edge handles keep d3's `ew-resize` cursor.
 - Year edges: each year owns the band year ± 0.5. A brushed year must be within 0.25 of its dot, so 1958 and 2025 stay selectable at the plot edges.
+- The brush overlay covers the timeline points, so hovering shows a readout (guide line + "1975: 35 #1 songs") instead of `<title>` tooltips.
+- GenreBars: each genre's whole row (label, bar, count) is the hover/focus target, so 1-song bars (~1px wide) can be hovered. Rows are keyboard-focusable; focus acts like hover.
+- Use `plural()` from `data.js` for counts in text ("1 song", "2 songs").
 - **Linking = highlight:** dim non-matches, remove nothing. **Filtering = remove** non-matches and recompute aggregates. When describing or building a feature, say which one it is.
 
 ## Git workflow

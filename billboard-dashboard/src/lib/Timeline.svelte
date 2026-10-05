@@ -1,16 +1,14 @@
 <script>
 	import * as d3 from 'd3';
-	import { FIRST_YEAR, LAST_YEAR } from './data.js';
+	import { FIRST_YEAR, LAST_YEAR, plural } from './data.js';
 
-	// Context view: always receives the full dataset. yearRange is owned by the page: null, or a list of
-	// [startYear, endYear] ranges. The brush reports changes through onbrush and is redrawn from yearRange.
-	// The last range is the "active" one, held by the d3 brush (movable and resizable);
-	// earlier ranges are drawn as static regions.
-	let { data, yearRange = null, onbrush = () => {} } = $props();
+	// Context view: always receives the full dataset. The brushed [startYear, endYear] (or null when
+	// cleared) goes back to the page through onbrush; the page owns yearRange.
+	let { data, onbrush = () => {} } = $props();
 
 	let width = $state(800);
 	const height = 300;
-	const margin = { top: 16, right: 24, bottom: 48, left: 64 };
+	const margin = { top: 24, right: 24, bottom: 48, left: 64 };
 	let innerWidth = $derived(Math.max(0, width - margin.left - margin.right));
 	const innerHeight = height - margin.top - margin.bottom;
 
@@ -51,23 +49,24 @@
 	});
 
 	let brushG = $state();
-	let brush = $state.raw(null);
-	// True while the user is dragging, so syncing from yearRange doesn't fight the gesture.
-	let dragging = false;
-	// Bookkeeping for the gesture in progress (set on 'start', cleared on 'end').
+	// The range last sent through onbrush. Brush memory only (the page owns yearRange): used to redraw the
+	// brush after a resize and to hit-test hovers and clicks.
+	let selectedYears = null;
+	// Gesture in progress: which brush element it started on and where (set on 'start', cleared on 'end').
 	let gesture = null;
 
-	let staticRanges = $derived(yearRange ? yearRange.slice(0, -1) : []);
-
-	// Clear cue: while the pointer is over a selected range the cursor becomes an ×, since a click there clears.
-	// hoverPx is the pointer's x in the plot (null when away or pressing).
+	// Pointer x in the plot (null when away or pressing), and whether it is over the selection.
 	let hoverPx = $state(null);
-	let overRange = $derived(hoverPx != null && !!yearRange && !!rangeAt(yearRange, hoverPx));
+	let overSelection = $state(false);
+	// Readout for the year under the pointer. It replaces point tooltips, which the brush overlay covers.
+	let hoverYear = $derived(
+		hoverPx == null ? null : (counts.find((d) => d.year === Math.round(x.invert(hoverPx))) ?? null)
+	);
 
-	// Each year owns the band from year − 0.5 to year + 0.5, so a single-year range is still visible.
+	// Each year owns the band from year − 0.5 to year + 0.5, so a single-year selection is still visible.
 	// Pixel extent -> years with the x-scale's invert: the years whose dots are inside the selection or
 	// within a quarter year of it. The slack keeps 1958/2025 selectable at the plot edges and absorbs
-	// sub-pixel drift when a range drawn by toPixels (edges at ±0.5) is moved.
+	// sub-pixel drift when a snapped selection (edges at ±0.5) is moved.
 	function toYears([p0, p1]) {
 		const start = Math.ceil(x.invert(p0) - 0.25);
 		const end = Math.floor(x.invert(p1) + 0.25);
@@ -76,28 +75,19 @@
 	function toPixels([start, end]) {
 		return [Math.max(0, x(start - 0.5)), Math.min(innerWidth, x(end + 0.5))];
 	}
-	function rangeAt(ranges, px) {
+	function inSelection(px) {
+		if (!selectedYears) return false;
 		const year = x.invert(px);
-		return ranges.find(([start, end]) => year >= start - 0.5 && year <= end + 0.5);
+		return year >= selectedYears[0] - 0.5 && year <= selectedYears[1] + 0.5;
 	}
-	// Add a range, merging it with any ranges it overlaps or touches. The merged range becomes the active one.
-	function addRange(ranges, [start, end]) {
-		const rest = [];
-		for (const r of ranges) {
-			if (r[0] <= end + 1 && r[1] >= start - 1) {
-				start = Math.min(start, r[0]);
-				end = Math.max(end, r[1]);
-			} else rest.push(r);
-		}
-		return [...rest, [start, end]];
+	function select(range) {
+		if (JSON.stringify(range) === JSON.stringify(selectedYears)) return;
+		selectedYears = range;
+		onbrush(range);
 	}
-	function emit(ranges) {
-		const next = ranges.length ? ranges : null;
-		if (JSON.stringify(next) !== JSON.stringify(yearRange)) onbrush(next);
-	}
-	function drawActive(b, ranges) {
-		const active = ranges?.at(-1);
-		d3.select(brushG).call(b.move, active ? toPixels(active) : null);
+	function clearHover() {
+		hoverPx = null;
+		overSelection = false;
 	}
 
 	// Create the brush; re-created only when the plot size changes.
@@ -109,96 +99,79 @@
 				[innerWidth, innerHeight]
 			])
 			.on('start', (event) => {
-				// Programmatic moves (syncing, snapping) have no sourceEvent; only react to the user.
+				// Programmatic moves (snapping, resizing) have no sourceEvent; only react to the user.
 				if (!event.sourceEvent) return;
-				dragging = true;
-				const ranges = yearRange ?? [];
-				const shift = event.sourceEvent.shiftKey;
-				// d3 tags its elements: 'overlay' (empty area), 'selection' (inside the active range), 'w'/'e' (handles).
-				const target = event.sourceEvent.target?.__data__?.type;
-				const onActive = target !== 'overlay';
+				// d3 tags its elements: 'overlay' (empty area), 'selection' (inside it), 'w'/'e' (edge handles).
 				gesture = {
-					shift,
-					target,
-					x0: d3.pointer(event.sourceEvent, brushG)[0],
-					// Ranges that stay put during this gesture: the others when editing the active range,
-					// all of them when Shift+dragging a new one, none when a plain drag replaces the selection.
-					base: onActive ? ranges.slice(0, -1) : shift ? ranges : []
+					target: event.sourceEvent.target?.__data__?.type,
+					x0: d3.pointer(event.sourceEvent, brushG)[0]
 				};
 			})
 			.on('brush', (event) => {
-				if (!event.sourceEvent || !gesture) return;
+				if (!event.sourceEvent) return;
 				const range = toYears(event.selection);
-				if (range) emit([...gesture.base, range]);
+				if (range) select(range);
 			})
 			.on('end', (event) => {
 				if (!event.sourceEvent || !gesture) return;
-				dragging = false;
 				const g = gesture;
 				gesture = null;
-				const ranges = yearRange ?? [];
 				const px = d3.pointer(event.sourceEvent, brushG)[0];
-				// A click is a press without a drag: on empty space d3 reports no selection;
-				// inside the active range it reports a "move" that went nowhere.
-				const isClick =
-					!event.selection || (g.target === 'selection' && Math.abs(px - g.x0) < 3);
-				if (isClick) {
-					if (!g.shift) {
-						emit([]); // Click anywhere: clear every range.
-					} else {
-						const hit = rangeAt(ranges, px); // Shift+click a range: remove just that range.
-						emit(hit ? ranges.filter((r) => r !== hit) : ranges);
-					}
-				} else {
-					const range = toYears(event.selection);
-					emit(range ? addRange(g.base, range) : g.base);
-				}
-				// The brush may have changed visually even if yearRange did not, so always redraw it.
-				drawActive(b, yearRange);
+				// A click is a press without a drag: on empty space d3 reports no selection; inside the
+				// selection it reports a "move" that went nowhere. Either way, a click clears.
+				const isClick = !event.selection || (g.target === 'selection' && Math.abs(px - g.x0) < 3);
+				select(isClick ? null : toYears(event.selection));
+				// Snap the brush to the selected years (or hide it when cleared).
+				d3.select(brushG).call(b.move, selectedYears ? toPixels(selectedYears) : null);
 			});
 		d3.select(brushG)
 			.call(b)
-			// Hover tracking for the clear cursor; off while a button is pressed (dragging or clicking).
-			.on('pointermove.cue', (event) => {
-				hoverPx = event.buttons ? null : d3.pointer(event, brushG)[0];
+			.call(b.move, selectedYears ? toPixels(selectedYears) : null)
+			// Hover tracking for the readout and the clear cursor; off while a button is pressed.
+			.on('pointermove.hover', (event) => {
+				if (event.buttons) return clearHover();
+				hoverPx = d3.pointer(event, brushG)[0];
+				overSelection = inSelection(hoverPx);
 			})
-			.on('pointerdown.cue pointerleave.cue', () => (hoverPx = null));
-		brush = b;
-	});
-
-	// Draw the active range from yearRange: restores it after a resize and follows changes from the page.
-	$effect(() => {
-		const ranges = yearRange;
-		if (brush && !dragging) drawActive(brush, ranges);
+			.on('pointerdown.hover pointerleave.hover', clearHover);
 	});
 </script>
 
 <figure class="card">
 	<h2>Number of #1 songs per year</h2>
 	<p class="subtitle">
-		Each point counts the songs that first reached #1 that year. This counts songs, not weeks spent
-		at #1. {FIRST_YEAR} starts in August and {LAST_YEAR} covers only early January.
-		<strong>Drag across the chart to filter the views below by year.</strong> Shift+drag adds another
-		range; click to clear; Shift+click a range to remove just that one.
+		Each point counts the songs that first reached #1 that year (songs, not weeks at #1).
+		{FIRST_YEAR} starts in August; {LAST_YEAR} covers only early January.
 	</p>
+	<p class="hint">Drag to filter by year · Drag the selection to move it · Click to clear</p>
 	<div class="chart" bind:clientWidth={width}>
-		<svg {width} {height} role="img" aria-label="Line chart of the number of #1 songs per year, {FIRST_YEAR} to {LAST_YEAR}">
+		<svg {width} {height} role="group" aria-label="Line chart of the number of #1 songs per year, {FIRST_YEAR} to {LAST_YEAR}. Drag to filter the other views by year.">
 			<g transform="translate({margin.left},{margin.top})">
 				<g class="axis" bind:this={xAxisG} transform="translate(0,{innerHeight})"></g>
 				<g class="axis" bind:this={yAxisG}></g>
 
 				<path d={linePath} fill="none" stroke="#2f6fb0" stroke-width="1.75" />
 				{#each counts as d (d.year)}
-					<circle cx={x(d.year)} cy={y(d.count)} r="3" fill="#2f6fb0">
-						<title>{d.year}: {d.count} #1 songs</title>
-					</circle>
+					<circle cx={x(d.year)} cy={y(d.count)} r="3" fill="#2f6fb0" />
 				{/each}
 
-				{#each staticRanges as r (r.join('-'))}
-					{@const [x0, x1] = toPixels(r)}
-					<rect class="static-range" class:clearing={overRange} x={x0} y="0" width={x1 - x0} height={innerHeight} />
-				{/each}
-				<g class="brush" class:over-range={overRange} bind:this={brushG}></g>
+				<g class="brush" class:over-selection={overSelection} bind:this={brushG}></g>
+
+				<!-- Readout for the hovered year; ignores the pointer so the brush still gets every event. -->
+				{#if hoverYear}
+					{@const cx = x(hoverYear.year)}
+					{@const cy = y(hoverYear.count)}
+					<g class="readout">
+						<line x1={cx} x2={cx} y1="0" y2={innerHeight} />
+						<circle {cx} {cy} r="5" />
+						<text
+							x={cx}
+							y={cy - 10}
+							text-anchor={cx < 60 ? 'start' : cx > innerWidth - 60 ? 'end' : 'middle'}
+							>{hoverYear.year}: {plural(hoverYear.count, '#1 song')}</text
+						>
+					</g>
+				{/if}
 				<text class="axis-label" x={innerWidth / 2} y={innerHeight + 40} text-anchor="middle">Year</text>
 				<text
 					class="axis-label"
@@ -240,29 +213,50 @@
 		font-size: 12px;
 		fill: #4b5159;
 	}
-	.static-range,
+	.hint {
+		margin: 0 0 4px;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: #2f6fb0;
+	}
 	.brush :global(.selection) {
 		fill: #2f6fb0;
 		fill-opacity: 0.12;
 		stroke: #2f6fb0;
 	}
-	.static-range {
-		pointer-events: none;
-	}
-	/* Clear cue while hovering a selected range: every range turns red (a click clears them all) and the
-	   cursor becomes a white × on red. CSS overrides d3's cursor attributes; edge handles keep ew-resize. */
-	.static-range.clearing,
-	.brush.over-range :global(.selection) {
+	/* Clear cue while hovering the selection: it turns red and the cursor becomes a white × on red.
+	   CSS overrides d3's cursor attributes; edge handles keep ew-resize. */
+	.brush.over-selection :global(.selection) {
 		fill: #d1242f;
 		fill-opacity: 0.15;
 		stroke: #d1242f;
 	}
-	.brush.over-range :global(.overlay),
-	.brush.over-range :global(.selection) {
+	.brush.over-selection :global(.overlay),
+	.brush.over-selection :global(.selection) {
 		cursor:
 			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='9' fill='%23d1242f' stroke='white' stroke-width='1.5'/%3E%3Cpath d='M6.5 6.5L13.5 13.5M13.5 6.5L6.5 13.5' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")
 				10 10,
 			pointer;
+	}
+	.readout {
+		pointer-events: none;
+	}
+	.readout line {
+		stroke: #8c959f;
+		stroke-dasharray: 3 3;
+	}
+	.readout circle {
+		fill: #fff;
+		stroke: #2f6fb0;
+		stroke-width: 2;
+	}
+	.readout text {
+		font-size: 12px;
+		font-weight: 600;
+		fill: #1f2328;
+		paint-order: stroke;
+		stroke: #fff;
+		stroke-width: 3px;
 	}
 	.axis-label {
 		font-size: 13px;

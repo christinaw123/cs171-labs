@@ -38,6 +38,11 @@ export function parseRow(row) {
 	};
 }
 
+// "1 song", "2 songs", "1,177 songs" (also for phrases: plural(1, '#1 song') -> "1 #1 song").
+export function plural(n, word) {
+	return `${d3.format(',')(n)} ${n === 1 ? word : word + 's'}`;
+}
+
 // Song counts per primary genre, highest first (ties broken alphabetically).
 export function countByGenre(songs) {
 	return d3

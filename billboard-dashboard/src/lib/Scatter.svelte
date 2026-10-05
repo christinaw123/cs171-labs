@@ -39,7 +39,7 @@
 	</p>
 	<p class="link-status">
 		{#if hoveredGenre === null}
-			Hover a genre bar to highlight its songs.
+			Hover or focus a genre in the bar chart to highlight its songs.
 		{:else}
 			Highlighting <strong>{hoveredGenre}</strong> songs; other songs are dimmed, not removed.
 		{/if}
@@ -57,8 +57,8 @@
 							cy={y(d.energy)}
 							r="3"
 							fill="#2f6fb0"
-							fill-opacity="0.45"
-							opacity={hoveredGenre === null || d.genre === hoveredGenre ? 1 : 0.15}
+							fill-opacity={hoveredGenre !== null && d.genre === hoveredGenre ? 0.9 : 0.45}
+							opacity={hoveredGenre === null || d.genre === hoveredGenre ? 1 : 0.3}
 						>
 							<title>{d.song} — {d.artist}
 Genre: {d.genre}

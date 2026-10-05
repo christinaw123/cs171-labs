@@ -11,20 +11,16 @@
 	let error = $state(null);
 	// Linking state: the primary genre under the pointer in GenreBars, or null. Owned here.
 	let hoveredGenre = $state(null);
-	// Filtering state: the brushed year ranges from Timeline, as a list of [startYear, endYear]
-	// (Shift+drag adds ranges), or null for all years. Owned here.
+	// Filtering state: the brushed [startYear, endYear] from Timeline, or null for all years. Owned here.
 	let yearRange = $state(null);
-	// The one filtered subset every result view reads: songs in any selected range. Timeline keeps the full songs array.
+	// The one filtered subset every result view reads. Timeline keeps the full songs array.
 	let filtered = $derived(
 		yearRange
-			? songs.filter((d) => yearRange.some(([start, end]) => d.year >= start && d.year <= end))
+			? songs.filter((d) => d.year >= yearRange[0] && d.year <= yearRange[1])
 			: songs
 	);
 	let rangeLabel = $derived(
-		yearRange
-			?.toSorted((a, b) => a[0] - b[0])
-			.map(([start, end]) => (start === end ? `${start}` : `${start}–${end}`))
-			.join(', ')
+		!yearRange ? '' : yearRange[0] === yearRange[1] ? `${yearRange[0]}` : `${yearRange[0]}–${yearRange[1]}`
 	);
 
 	onMount(async () => {
@@ -56,8 +52,15 @@
 	{:else if songs.length === 0}
 		<p class="status">Loading songs…</p>
 	{:else}
+		<p class="scope">
+			{#if yearRange}
+				Summary for <strong>{rangeLabel}</strong>, the years selected on the timeline
+			{:else}
+				Summary for all years, {FIRST_YEAR}–{LAST_YEAR}
+			{/if}
+		</p>
 		<KpiRow data={filtered} />
-		<Timeline data={songs} {yearRange} onbrush={(range) => (yearRange = range)} />
+		<Timeline data={songs} onbrush={(range) => (yearRange = range)} />
 		<p class="filter-status" aria-live="polite">
 			{#if yearRange}
 				Filtered to <strong>{rangeLabel}</strong>: {d3.format(',')(filtered.length)} of
@@ -107,6 +110,17 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
 		gap: 20px;
+	}
+	.scope {
+		margin: 0 0 -10px;
+		font-size: 0.875rem;
+		color: #4b5159;
+	}
+	/* Tighter cards on phones so the charts get more width. */
+	@media (max-width: 480px) {
+		main :global(.card) {
+			padding: 12px 12px 6px;
+		}
 	}
 	.filter-status {
 		margin: -8px 0 0;

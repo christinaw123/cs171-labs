@@ -1,6 +1,6 @@
 <script>
 	import * as d3 from 'd3';
-	import { countByGenre } from './data.js';
+	import { countByGenre, plural } from './data.js';
 
 	// hoveredGenre is owned by the page; this view reports hovers through onHoverGenre.
 	let { data, hoveredGenre = null, onHoverGenre = () => {} } = $props();
@@ -9,7 +9,9 @@
 	let genres = $derived(countByGenre(data));
 
 	let width = $state(500);
-	const margin = { top: 8, right: 48, bottom: 48, left: 150 };
+	const margin = { top: 8, right: 36, bottom: 48, left: 128 };
+	// Rows are hover targets across the label, bar, and count; they stop short of the rotated axis title.
+	const rowLeft = -(margin.left - 24);
 	const bandHeight = 26;
 	let innerWidth = $derived(Math.max(0, width - margin.left - margin.right));
 	let innerHeight = $derived(genres.length * bandHeight);
@@ -45,27 +47,44 @@
 	<h2>#1 songs by primary genre</h2>
 	<p class="subtitle">
 		Counts songs, not weeks at #1. Primary genre is the first genre listed; songs with no genre are
-		shown as "Unlabeled". Hover a bar to highlight its songs in the scatterplot.
+		shown as "Unlabeled". Hover or focus a genre to highlight its songs in the scatterplot.
 	</p>
 	<div class="chart" bind:clientWidth={width}>
-		<svg {width} {height} role="img" aria-label="Horizontal bar chart of the number of #1 songs in each primary genre">
+		<svg {width} {height} role="group" aria-label="Horizontal bar chart of the number of #1 songs in each primary genre">
 			<g transform="translate({margin.left},{margin.top})">
 				{#each genres as d (d.genre)}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<rect
-						class="bar"
+					<!-- One row per genre: hovering or focusing anywhere on it (label, bar, count) highlights the genre,
+					     so even 1-song bars are easy to target. Bar sizes never change. -->
+					<g
+						class="row"
 						class:hovered={d.genre === hoveredGenre}
-						x="0"
-						y={y(d.genre)}
-						width={x(d.count)}
-						height={y.bandwidth()}
-						fill={d.genre === 'Unlabeled' ? '#a3a9b0' : '#2f6fb0'}
+						role="button"
+						tabindex="0"
+						aria-pressed={d.genre === hoveredGenre}
+						aria-label="{d.genre}: {plural(d.count, 'song')}. Highlights these songs in the scatterplot."
 						onmouseenter={() => onHoverGenre(d.genre)}
 						onmouseleave={() => onHoverGenre(null)}
+						onfocus={() => onHoverGenre(d.genre)}
+						onblur={() => onHoverGenre(null)}
 					>
-						<title>{d.genre}: {d.count} songs</title>
-					</rect>
-					<text class="value" x={x(d.count) + 4} y={y(d.genre) + y.bandwidth() / 2} dy="0.35em">{d.count}</text>
+						<title>{d.genre}: {plural(d.count, 'song')}</title>
+						<rect
+							class="hit"
+							x={rowLeft}
+							y={y(d.genre) - (y.step() - y.bandwidth()) / 2}
+							width={innerWidth + margin.right - rowLeft}
+							height={y.step()}
+						/>
+						<rect
+							class="bar"
+							x="0"
+							y={y(d.genre)}
+							width={x(d.count)}
+							height={y.bandwidth()}
+							fill={d.genre === 'Unlabeled' ? '#a3a9b0' : '#2f6fb0'}
+						/>
+						<text class="value" x={x(d.count) + 4} y={y(d.genre) + y.bandwidth() / 2} dy="0.35em">{d.count}</text>
+					</g>
 				{/each}
 
 				<g class="axis" bind:this={xAxisG} transform="translate(0,{innerHeight})"></g>
@@ -76,7 +95,7 @@
 					class="axis-label"
 					transform="rotate(-90)"
 					x={-innerHeight / 2}
-					y={-134}
+					y={-(margin.left - 14)}
 					text-anchor="middle">Primary Genre</text>
 			</g>
 		</svg>
@@ -112,11 +131,26 @@
 		font-size: 12px;
 		fill: #4b5159;
 	}
-	.bar {
-		cursor: pointer;
+	/* Axes sit on top of the rows; let pointer events through to the row under each genre label. */
+	.axis {
+		pointer-events: none;
 	}
-	/* Hover cue: darken the bar without changing its size. */
-	.bar.hovered {
+	.row {
+		cursor: pointer;
+		outline: none;
+	}
+	.hit {
+		fill: transparent;
+	}
+	/* Hover/focus cue: tint the row and darken the bar, without changing the bar's size. */
+	.row.hovered .hit {
+		fill: #eaf1f8;
+	}
+	.row:focus-visible .hit {
+		stroke: #1f2328;
+		stroke-width: 1.5;
+	}
+	.row.hovered .bar {
 		filter: brightness(0.75);
 	}
 	.value {
